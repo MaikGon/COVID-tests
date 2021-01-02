@@ -11,16 +11,19 @@ def load_data(data):
     with open(data) as f:
         data = pd.read_csv(f)
 
+    coords = data[['Country/Region', 'Lat', 'Long']]
+    coords = coords.groupby(by='Country/Region').mean()
+
     data.drop(columns=['Province/State', 'Lat', 'Long'], inplace=True)
     data = data.groupby(by='Country/Region').sum()
     # print(data.head(5))
-    return data
+    return data, coords
 
 
 def zad1():
-    confirmed = load_data('time_series_covid19_confirmed_global.csv')
-    deaths = load_data('time_series_covid19_deaths_global.csv')
-    recovered = load_data('time_series_covid19_recovered_global.csv')
+    confirmed, coords = load_data('time_series_covid19_confirmed_global.csv')
+    deaths, _ = load_data('time_series_covid19_deaths_global.csv')
+    recovered, _ = load_data('time_series_covid19_recovered_global.csv')
 
     # Find countries with no public recoveries record
     r = pd.pivot_table(recovered, columns=['Country/Region'], aggfunc=np.sum).sum()
@@ -66,34 +69,40 @@ def zad2(confirmed):
     confirmed_seven = confirmed.copy()
     confirmed_factor = confirmed.copy()
 
-    for i in range(len(confirmed_seven.columns)):
-        last_7 = 0
-        mean_7 = 0
-        for j in range(7):
-            if i-j >= 0:
-                last_7 += confirmed[confirmed.columns[i-j]]
-                mean_7 += 1
-            else:
-                pass
-        confirmed_seven[confirmed_seven.columns[i]] = last_7/mean_7
+    for i in range(6, len(confirmed_seven.columns)):
 
-        # Dopytac o co kaman jak pierwszych 5 dni nie ma
-        if i >= 5:
-            confirmed_factor[confirmed_factor.columns[i]] = confirmed_seven[confirmed_seven.columns[i]] / confirmed_seven[confirmed_seven.columns[i-5]]
-        else:
-            confirmed_factor[confirmed_factor.columns[i]] = 0
+        last_7 = 0
+        for j in range(6):
+            last_7 += confirmed[confirmed.columns[i-j]]
+
+        confirmed_seven[confirmed_seven.columns[i]] = last_7/7
+        confirmed_factor[confirmed_factor.columns[i]] = confirmed_seven[confirmed_seven.columns[i]] / confirmed_seven[confirmed_seven.columns[i-5]]
+
+    for i in range(6):
+        confirmed_seven.drop([confirmed_seven.columns[0]], axis=1, inplace=True)
+        confirmed_factor.drop([confirmed_factor.columns[0]], axis=1, inplace=True)
 
     print(confirmed_seven)
     print(confirmed_factor)
 
-    weather_data(confirmed_factor)
+    #weather_data(confirmed_factor)
 
 
 def weather_data(data):
     weather_max = Dataset('TerraClimate_tmax_2018.nc')
     weather_min = Dataset('TerraClimate_tmin_2018.nc')
-    month = 0  # styczeń
-    print(weather_max.variables.keys())
+    frames = []
+
+    for i in range(12):
+        w_max = pd.DataFrame(weather_max['tmax'][i])
+        w_min = pd.DataFrame(weather_min['tmin'][i])
+        w_mean = (w_max + w_min) / 2
+        frames.append(w_mean)
+        # w_mean_all = pd.concat([w_mean_all, w_mean])
+
+    #final = pd.concat(frames)
+    month = 7  # styczeń
+
     plt.imshow(weather_max['tmax'][month])
     plt.show()
 
