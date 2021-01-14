@@ -7,6 +7,7 @@ from netCDF4 import Dataset
 from scipy.stats import f_oneway
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from dateutil.relativedelta import relativedelta
+from time import perf_counter
 
 
 def load_data(data):
@@ -123,7 +124,6 @@ def zad2(active):
                 active_factor[active_factor.columns[i]][ctr] = active_seven[active_seven.columns[i]][ctr] / active_seven[active_seven.columns[i - 5]][ctr]
 
     for i in range(11): # 6+5
-        active_seven.drop([active_seven.columns[0]], axis=1, inplace=True)
         active_factor.drop([active_factor.columns[0]], axis=1, inplace=True)
 
     active_factor.to_csv("reproduction.csv")
@@ -152,25 +152,17 @@ def weather_data():
 
 
 def hypothesis(data, frames, coords):
-
+    # Discrete values
     for frame in frames:
-        print(frame)
-        for ind in frame.index:
-            for i in range(len(frame.columns)):
-                val = frame[frame.columns[i]][ind]
-                if val < 0:
-                    frame[frame.columns[i]][ind] = 0
-                elif 0 <= val < 10:
-                    frame[frame.columns[i]][ind] = 1
-                elif 10 <= val < 20:
-                    frame[frame.columns[i]][ind] = 2
-                elif 20 <= val < 30:
-                    frame[frame.columns[i]][ind] = 3
-                elif val > 30:
-                    frame[frame.columns[i]][ind] = 4
+        for col in frame.columns:
+            frame.loc[frame[col] < 0, col] = 0
+            frame.loc[(frame[col] >= 0) & (frame[col] < 10), col] = 1
+            frame.loc[(frame[col] >= 10) & (frame[col] < 20), col] = 2
+            frame.loc[(frame[col] >= 20) & (frame[col] < 30), col] = 3
+            frame.loc[frame[col] >= 30, col] = 4
 
+    # Normalize data
     for country in data.index:
-        # normalize data
         l_ist = max(data.loc[country].replace(np.inf, 0).fillna(0).tolist())
         data.loc[country] = data.loc[country] / l_ist
 
@@ -184,6 +176,7 @@ if __name__ == "__main__":
     # active_factor = zad2(active)
 
     active_factor = pd.DataFrame(pd.read_csv("reproduction.csv"))
+    print(active_factor)
     frames = weather_data()
     hypothesis(active_factor, frames, coords)
 
