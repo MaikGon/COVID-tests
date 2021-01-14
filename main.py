@@ -6,7 +6,6 @@ import netCDF4
 from netCDF4 import Dataset
 from scipy.stats import f_oneway
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
-from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
 
@@ -98,64 +97,77 @@ def zad1():
 
     # subpoint 5 in task 2
 
-    # Task 2
-    zad2(confirmed, active, coords)
+    return active, coords
 
 
-def zad2(confirmed, active, coords):
-    confirmed_seven = confirmed.copy()
-    confirmed_factor = confirmed.copy()
+def zad2(active):
+    active_seven = active.copy()
+    active_factor = active.copy()
 
-    for ctr in confirmed_seven.index:  # Country
-        for i in range(6, len(confirmed_seven.columns)):
+    for ctr in active_seven.index:  # Country
+        print(ctr)
+        for i in range(6, len(active_seven.columns)):
             last_7 = 0
             days = 0
             for j in range(7):
                 act = active[active.columns[i - j]][ctr]  # Active case for country for indicated day
                 if act >= 100:
-                    last_7 += confirmed[confirmed.columns[i - j]][ctr]
+                    last_7 += act
                     days += 1
 
             if days == 0:
-                confirmed_seven[confirmed_seven.columns[i]][ctr] = np.nan
-                confirmed_factor[confirmed_factor.columns[i]][ctr] = np.nan
+                active_seven[active_seven.columns[i]][ctr] = np.nan
+                active_factor[active_factor.columns[i]][ctr] = np.nan
             else:
-                confirmed_seven[confirmed_seven.columns[i]][ctr] = last_7 / days
-                confirmed_factor[confirmed_factor.columns[i]][ctr] = confirmed_seven[confirmed_seven.columns[i]][ctr] / confirmed_seven[confirmed_seven.columns[i - 5]][ctr]
+                active_seven[active_seven.columns[i]][ctr] = last_7 / days
+                active_factor[active_factor.columns[i]][ctr] = active_seven[active_seven.columns[i]][ctr] / active_seven[active_seven.columns[i - 5]][ctr]
 
     for i in range(11): # 6+5
-        confirmed_seven.drop([confirmed_seven.columns[0]], axis=1, inplace=True)
-        confirmed_factor.drop([confirmed_factor.columns[0]], axis=1, inplace=True)
+        active_seven.drop([active_seven.columns[0]], axis=1, inplace=True)
+        active_factor.drop([active_factor.columns[0]], axis=1, inplace=True)
 
-    confirmed_seven.to_csv("mean_seven.csv")
-    confirmed_factor.to_csv("reproduction.csv")
+    active_factor.to_csv("reproduction.csv")
 
-    #weather_data(confirmed_factor, coords)
-    #hypothesis(confirmed_factor, 'x', coords)
+    return active_factor
 
 
-def weather_data(data, coords):
+def weather_data():
     weather_max = Dataset('TerraClimate_tmax_2018.nc')
     weather_min = Dataset('TerraClimate_tmin_2018.nc')
     frames = []
+
+    columns = [(((360 / 8640) * lon) - 180) for lon in range(8640)]
+    indexes = [-(((180 / 4320) * lat) - 90) for lat in range(4320)]
 
     for i in range(12):
         w_max = pd.DataFrame(weather_max['tmax'][i])
         w_min = pd.DataFrame(weather_min['tmin'][i])
         w_mean = (w_max + w_min) / 2
-        columns = [(i - 180) / 24 for i in w_mean.columns]
-        indexes = [(i - 90) / 24 for i in w_mean.index]
         w_mean.columns = columns
         w_mean.index = indexes
         frames.append(w_mean)
+        break # only for faster calcs - delete later
 
-    plt.imshow(frames[0])
-    plt.show()
-
-    hypothesis(data, frames, coords)
+    return frames
 
 
 def hypothesis(data, frames, coords):
+
+    for frame in frames:
+        print(frame)
+        for ind in frame.index:
+            for i in range(len(frame.columns)):
+                val = frame[frame.columns[i]][ind]
+                if val < 0:
+                    frame[frame.columns[i]][ind] = 0
+                elif 0 <= val < 10:
+                    frame[frame.columns[i]][ind] = 1
+                elif 10 <= val < 20:
+                    frame[frame.columns[i]][ind] = 2
+                elif 20 <= val < 30:
+                    frame[frame.columns[i]][ind] = 3
+                elif val > 30:
+                    frame[frame.columns[i]][ind] = 4
 
     for country in data.index:
         # normalize data
@@ -168,5 +180,11 @@ def hypothesis(data, frames, coords):
 
 
 if __name__ == "__main__":
-    zad1()
+    active, coords = zad1()
+    # active_factor = zad2(active)
+
+    active_factor = pd.DataFrame(pd.read_csv("reproduction.csv"))
+    frames = weather_data()
+    hypothesis(active_factor, frames, coords)
+
 
