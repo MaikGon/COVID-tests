@@ -153,30 +153,48 @@ def weather_data():
 
 def hypothesis(data, frames, coords):
     # Discrete values
-    for frame in frames:
-        for col in frame.columns:
-            frame.loc[frame[col] < 0, col] = 0
-            frame.loc[(frame[col] >= 0) & (frame[col] < 10), col] = 1
-            frame.loc[(frame[col] >= 10) & (frame[col] < 20), col] = 2
-            frame.loc[(frame[col] >= 20) & (frame[col] < 30), col] = 3
-            frame.loc[frame[col] >= 30, col] = 4
+    # for frame in frames:
+    #     for col in frame.columns:
+    #         frame.loc[frame[col] < 0, col] = 0
+    #         frame.loc[(frame[col] >= 0) & (frame[col] < 10), col] = 1
+    #         frame.loc[(frame[col] >= 10) & (frame[col] < 20), col] = 2
+    #         frame.loc[(frame[col] >= 20) & (frame[col] < 30), col] = 3
+    #         frame.loc[frame[col] >= 30, col] = 4
 
     # Normalize data
+    data.columns = pd.to_datetime(data.columns).month
+    data = data.groupby(by=data.columns, axis=1).mean()
     for country in data.index:
         l_ist = max(data.loc[country].replace(np.inf, 0).fillna(0).tolist())
         data.loc[country] = data.loc[country] / l_ist
 
     # Add Lat and Long to data
     data = pd.concat([data, coords], axis=1)
-    print(data)
+    # data.set_index(['Lat', 'Long'], inplace=True)
+    print(data, frames)
+
+    ctr_found = []
+    for frame in frames:
+        for ctr in data.index:
+            long_closest = np.abs(frame.columns - data['Long'][ctr]).argmin()
+            long_found = list(frame.columns)[long_closest]
+            print(long_found)
+
+            lat_closest = np.abs(frame.index - data['Lat'][ctr]).argmin()
+            lat_found = list(frame.index)[lat_closest]
+            print(lat_found)
+
+            ctr_found.append(frame.loc[lat_found, long_found])
+
+    print(ctr_found)
+
 
 
 if __name__ == "__main__":
     active, coords = zad1()
     # active_factor = zad2(active)
 
-    active_factor = pd.DataFrame(pd.read_csv("reproduction.csv"))
-    print(active_factor)
+    active_factor = pd.DataFrame(pd.read_csv("reproduction.csv", index_col='Country/Region'))
     frames = weather_data()
     hypothesis(active_factor, frames, coords)
 
