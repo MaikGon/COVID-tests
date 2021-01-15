@@ -8,6 +8,7 @@ from scipy.stats import f_oneway
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from dateutil.relativedelta import relativedelta
 from time import perf_counter
+import math
 
 
 def load_data(data):
@@ -28,22 +29,6 @@ def zad1():
     deaths, _ = load_data('time_series_covid19_deaths_global.csv')
     recovered, _ = load_data('time_series_covid19_recovered_global.csv')
 
-    # Find countries with no public recoveries record
-    r = pd.pivot_table(recovered, columns=['Country/Region'], aggfunc=np.sum).sum()
-    for country in r.index:
-        if r[country] == 0:  # or NaN - dopytac
-            pass
-            # print(country, r[country])
-
-    # Drop countries with no public deaths record
-    d = pd.pivot_table(deaths, columns=['Country/Region'], aggfunc=np.sum).sum()
-    for country in d.index:
-        if d[country] == 0:  # or NaN - dopytac
-            pass
-            # confirmed.drop(index=country, inplace=True)
-            # deaths.drop(index=country, inplace=True)
-            # recovered.drop(index=country, inplace=True)
-
     # subpoint 1
     active = confirmed.subtract(deaths).subtract(recovered)
     # print('Active: ', active)
@@ -51,12 +36,11 @@ def zad1():
     # subpoint 3
     countries_14 = []
     rec = recovered.copy()
-    rec.columns = pd.to_datetime(rec.columns).year
-    rec = rec.groupby(rec.columns, axis=1).sum()
+    rec = rec.sum(axis=1)
 
     # Find Countires with no recoveries
     for r in rec.index:
-        if rec.loc[r].values == 0:
+        if rec.loc[r] == 0:
             countries_14.append(r)
             # print(r, rec.loc[r].values[0])
 
@@ -75,20 +59,19 @@ def zad1():
     recovered = recovered.groupby(recovered.columns, axis=1).sum()
 
     deaths_r = deaths.copy()
-    deaths_r.columns = pd.to_datetime(deaths_r.columns).month
-    deaths_r = deaths_r.groupby(deaths_r.columns, axis=1).sum()
-
+    deaths_r.columns = pd.to_datetime(deaths_r.columns)
+    deaths_r = deaths_r.groupby([deaths_r.columns.year, deaths_r.columns.month], axis=1).sum()
+    print(deaths_r)
     death_rate = deaths_r.divide(recovered)
     # print('Death_rate: ', death_rate)
 
     # subpoint 4
     deaths_check = deaths.copy()
-    deaths_check.columns = pd.to_datetime(deaths_check.columns).year
-    deaths_check = deaths_check.groupby(deaths_check.columns, axis=1).sum()
+    deaths_check = deaths_check.sum(axis=1)
 
     erase_deaths = []
     for ctr in deaths_check.index:
-        if deaths_check.loc[ctr].values == 0:
+        if deaths_check.loc[ctr] == 0:
             erase_deaths.append(ctr)
             # print(ctr, deaths_check.loc[ctr].values[0])
 
@@ -153,13 +136,13 @@ def weather_data():
 
 def hypothesis(data, frames, coords):
     # Discrete values
-    # for frame in frames:
-    #     for col in frame.columns:
-    #         frame.loc[frame[col] < 0, col] = 0
-    #         frame.loc[(frame[col] >= 0) & (frame[col] < 10), col] = 1
-    #         frame.loc[(frame[col] >= 10) & (frame[col] < 20), col] = 2
-    #         frame.loc[(frame[col] >= 20) & (frame[col] < 30), col] = 3
-    #         frame.loc[frame[col] >= 30, col] = 4
+    for frame in frames:
+        for col in frame.columns:
+            frame.loc[frame[col] < 0, col] = 0
+            frame.loc[(frame[col] >= 0) & (frame[col] < 10), col] = 1
+            frame.loc[(frame[col] >= 10) & (frame[col] < 20), col] = 2
+            frame.loc[(frame[col] >= 20) & (frame[col] < 30), col] = 3
+            frame.loc[frame[col] >= 30, col] = 4
 
     # Normalize data
     data.columns = pd.to_datetime(data.columns).month
@@ -174,28 +157,57 @@ def hypothesis(data, frames, coords):
     print(data, frames)
 
     ctr_found = []
-    for frame in frames:
+    temp_values = []
+
+    for ind, frame in enumerate(frames):
         for ctr in data.index:
             long_closest = np.abs(frame.columns - data['Long'][ctr]).argmin()
             long_found = list(frame.columns)[long_closest]
-            print(long_found)
 
             lat_closest = np.abs(frame.index - data['Lat'][ctr]).argmin()
             lat_found = list(frame.index)[lat_closest]
-            print(lat_found)
 
             ctr_found.append(frame.loc[lat_found, long_found])
+            temp_values.append(data[ind+1][ctr])
 
-    print(ctr_found)
+    print(temp_values)
+    data_0, data_1, data_2, data_3, data_4 = [], [], [], [], []
+    for ind, val in enumerate(ctr_found):
+        if val == 0 and not math.isnan(temp_values[ind]):
+            data_0.append(temp_values[ind])
+        elif val == 1 and not math.isnan(temp_values[ind]):
+            data_1.append(temp_values[ind])
+        elif val == 2 and not math.isnan(temp_values[ind]):
+            data_2.append(temp_values[ind])
+        elif val == 3 and not math.isnan(temp_values[ind]):
+            data_3.append(temp_values[ind])
+        elif val == 4 and not math.isnan(temp_values[ind]):
+            data_4.append(temp_values[ind])
 
+    print(data_0, data_1, data_2, data_3, data_4)
+    args = []
+
+    if data_0:
+        args.append(data_0)
+    if data_1:
+        args.append(data_1)
+    if data_2:
+        args.append(data_2)
+    if data_3:
+        args.append(data_3)
+    if data_4:
+        args.append(data_4)
+
+    f_value, p_value = f_oneway(args)
+    print(f'F-stat: {f_value}, p-val: {p_value}')
 
 
 if __name__ == "__main__":
     active, coords = zad1()
     # active_factor = zad2(active)
 
-    active_factor = pd.DataFrame(pd.read_csv("reproduction.csv", index_col='Country/Region'))
-    frames = weather_data()
-    hypothesis(active_factor, frames, coords)
+    #active_factor = pd.DataFrame(pd.read_csv("reproduction.csv", index_col='Country/Region'))
+    #frames = weather_data()
+    #hypothesis(active_factor, frames, coords)
 
 
