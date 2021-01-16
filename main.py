@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.ticker import PercentFormatter
 import netCDF4
 from netCDF4 import Dataset
 from scipy.stats import f_oneway
@@ -9,6 +8,7 @@ from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from dateutil.relativedelta import relativedelta
 from time import perf_counter
 import math
+from scipy.stats import chisquare
 
 
 def load_data(data):
@@ -20,7 +20,7 @@ def load_data(data):
 
     data.drop(columns=['Province/State', 'Lat', 'Long'], inplace=True)
     data = data.groupby(by='Country/Region').sum()
-    # print(data.head(5))
+    # print(data)
     return data, coords
 
 
@@ -29,11 +29,6 @@ def zad1():
     deaths, _ = load_data('time_series_covid19_deaths_global.csv')
     recovered, _ = load_data('time_series_covid19_recovered_global.csv')
 
-    # subpoint 1
-    active = confirmed.subtract(deaths).subtract(recovered)
-    # print('Active: ', active)
-
-    # subpoint 3
     countries_14 = []
     rec = recovered.copy()
     rec = rec.sum(axis=1)
@@ -46,7 +41,6 @@ def zad1():
 
     recovered.columns = pd.to_datetime(recovered.columns)
     confirmed.columns = pd.to_datetime(confirmed.columns)
-    active.columns = pd.to_datetime(active.columns)
 
     for ctr in countries_14:
         for date in confirmed.loc[ctr].index[:-14]:
@@ -54,18 +48,7 @@ def zad1():
             date += relativedelta(days=14)
             recovered.loc[ctr][date] += val
 
-    # subpoint 2
-    recovered.columns = pd.to_datetime(recovered.columns).month
-    recovered = recovered.groupby(recovered.columns, axis=1).sum()
-
-    deaths_r = deaths.copy()
-    deaths_r.columns = pd.to_datetime(deaths_r.columns)
-    deaths_r = deaths_r.groupby([deaths_r.columns.year, deaths_r.columns.month], axis=1).sum()
-    print(deaths_r)
-    death_rate = deaths_r.divide(recovered)
-    # print('Death_rate: ', death_rate)
-
-    # subpoint 4
+    # Find Countires with no death record
     deaths_check = deaths.copy()
     deaths_check = deaths_check.sum(axis=1)
 
@@ -73,15 +56,30 @@ def zad1():
     for ctr in deaths_check.index:
         if deaths_check.loc[ctr] == 0:
             erase_deaths.append(ctr)
-            # print(ctr, deaths_check.loc[ctr].values[0])
+            # print(ctr, deaths_check.loc[ctr])
 
     # drop countires without death record
     confirmed.drop(erase_deaths, axis=0, inplace=True)
-    active.drop(erase_deaths, axis=0, inplace=True)
+    deaths.drop(erase_deaths, axis=0, inplace=True)
+    recovered.drop(erase_deaths, axis=0, inplace=True)
 
-    # subpoint 5 in task 2
+    rec_death = recovered.copy()
+    rec_death = rec_death.groupby([rec_death.columns.year, rec_death.columns.month], axis=1).sum()
 
-    return active, coords
+    deaths_r = deaths.copy()
+    deaths_r.columns = pd.to_datetime(deaths_r.columns)
+    deaths_r = deaths_r.groupby([deaths_r.columns.year, deaths_r.columns.month], axis=1).sum()
+
+    death_rate = deaths_r.divide(rec_death)
+    #print('Death_rate: ', death_rate)
+
+
+    # Active cases
+    active = confirmed.subtract(deaths).subtract(recovered)
+    active.columns = pd.to_datetime(active.columns)
+    #print('Active cases: ', active)
+
+    return active, coords, confirmed, deaths
 
 
 def zad2(active):
@@ -91,30 +89,31 @@ def zad2(active):
     for ctr in active_seven.index:  # Country
         print(ctr)
         for i in range(6, len(active_seven.columns)):
-            last_7 = 0
-            days = 0
+            last_7 = 0.0
+            days = 0.0
             for j in range(7):
                 act = active[active.columns[i - j]][ctr]  # Active case for country for indicated day
                 if act >= 100:
                     last_7 += act
-                    days += 1
+                    days += 1.0
 
             if days == 0:
                 active_seven[active_seven.columns[i]][ctr] = np.nan
                 active_factor[active_factor.columns[i]][ctr] = np.nan
             else:
-                active_seven[active_seven.columns[i]][ctr] = last_7 / days
-                active_factor[active_factor.columns[i]][ctr] = active_seven[active_seven.columns[i]][ctr] / active_seven[active_seven.columns[i - 5]][ctr]
+                active_seven.loc[ctr, active_seven.columns[i]] = last_7 / days
+                active_factor.loc[ctr, active_factor.columns[i]] = active_seven[active_seven.columns[i]][ctr] / active_seven[active_seven.columns[i - 5]][ctr]
 
     for i in range(11): # 6+5
         active_factor.drop([active_factor.columns[0]], axis=1, inplace=True)
-
+    print(active_factor)
     active_factor.to_csv("reproduction.csv")
 
     return active_factor
 
 
 def weather_data():
+    start = perf_counter()
     weather_max = Dataset('TerraClimate_tmax_2018.nc')
     weather_min = Dataset('TerraClimate_tmin_2018.nc')
     frames = []
@@ -129,13 +128,17 @@ def weather_data():
         w_mean.columns = columns
         w_mean.index = indexes
         frames.append(w_mean)
-        break # only for faster calcs - delete later
+        # break # only for faster calcs - delete later
 
+    stop = perf_counter()
+    print('Elapsed time: ', str(stop-start))
     return frames
 
 
 def hypothesis(data, frames, coords):
+
     # Discrete values
+    start = perf_counter()
     for frame in frames:
         for col in frame.columns:
             frame.loc[frame[col] < 0, col] = 0
@@ -143,23 +146,24 @@ def hypothesis(data, frames, coords):
             frame.loc[(frame[col] >= 10) & (frame[col] < 20), col] = 2
             frame.loc[(frame[col] >= 20) & (frame[col] < 30), col] = 3
             frame.loc[frame[col] >= 30, col] = 4
+    stop = perf_counter()
+    print('Elapsed time: ', str(stop-start))
 
     # Normalize data
-    data.columns = pd.to_datetime(data.columns).month
-    data = data.groupby(by=data.columns, axis=1).mean()
+    data.columns = pd.to_datetime(data.columns)
+    data = data.groupby([data.columns.year, data.columns.month], axis=1).mean()
+
     for country in data.index:
         l_ist = max(data.loc[country].replace(np.inf, 0).fillna(0).tolist())
         data.loc[country] = data.loc[country] / l_ist
 
     # Add Lat and Long to data
     data = pd.concat([data, coords], axis=1)
-    # data.set_index(['Lat', 'Long'], inplace=True)
-    print(data, frames)
 
-    ctr_found = []
-    temp_values = []
-
+    alfa = 0.05
     for ind, frame in enumerate(frames):
+        ctr_found = []
+        temp_values = []
         for ctr in data.index:
             long_closest = np.abs(frame.columns - data['Long'][ctr]).argmin()
             long_found = list(frame.columns)[long_closest]
@@ -168,46 +172,76 @@ def hypothesis(data, frames, coords):
             lat_found = list(frame.index)[lat_closest]
 
             ctr_found.append(frame.loc[lat_found, long_found])
-            temp_values.append(data[ind+1][ctr])
 
-    print(temp_values)
-    data_0, data_1, data_2, data_3, data_4 = [], [], [], [], []
-    for ind, val in enumerate(ctr_found):
-        if val == 0 and not math.isnan(temp_values[ind]):
-            data_0.append(temp_values[ind])
-        elif val == 1 and not math.isnan(temp_values[ind]):
-            data_1.append(temp_values[ind])
-        elif val == 2 and not math.isnan(temp_values[ind]):
-            data_2.append(temp_values[ind])
-        elif val == 3 and not math.isnan(temp_values[ind]):
-            data_3.append(temp_values[ind])
-        elif val == 4 and not math.isnan(temp_values[ind]):
-            data_4.append(temp_values[ind])
+            year = 2020
+            month = ind + 1
+            if ind == 0:
+                year = 2021
+                month = 1
 
-    print(data_0, data_1, data_2, data_3, data_4)
-    args = []
+            temp_values.append(data[(year, month)][ctr])
 
-    if data_0:
-        args.append(data_0)
-    if data_1:
-        args.append(data_1)
-    if data_2:
-        args.append(data_2)
-    if data_3:
-        args.append(data_3)
-    if data_4:
-        args.append(data_4)
+        data_0, data_1, data_2, data_3, data_4 = [], [], [], [], []
 
-    f_value, p_value = f_oneway(args)
-    print(f'F-stat: {f_value}, p-val: {p_value}')
+        for inde, val in enumerate(ctr_found):
+            if val == 0 and not math.isnan(temp_values[inde]):
+                data_0.append(temp_values[inde])
+            elif val == 1 and not math.isnan(temp_values[inde]):
+                data_1.append(temp_values[inde])
+            elif val == 2 and not math.isnan(temp_values[inde]):
+                data_2.append(temp_values[inde])
+            elif val == 3 and not math.isnan(temp_values[inde]):
+                data_3.append(temp_values[inde])
+            elif val == 4 and not math.isnan(temp_values[inde]):
+                data_4.append(temp_values[inde])
+
+        args = []
+        names = []
+
+        if data_0:
+            args.append(data_0)
+            names.append('data_0')
+        if data_1:
+            args.append(data_1)
+            names.append('data_1')
+        if data_2:
+            args.append(data_2)
+            names.append('data_2')
+        if data_3:
+            args.append(data_3)
+            names.append('data_3')
+        if data_4:
+            args.append(data_4)
+            names.append('data_4')
+
+        if len(args) >= 2:
+            f_value, p_value = f_oneway(*args)
+            print(f'Month: {ind+1}, F-stat: {f_value}, p-val: {p_value}')
+
+            if p_value <= alfa:
+                print(pairwise_tukeyhsd(np.concatenate([*args]), np.concatenate(
+                    [[names[ind]] * len(f) for ind, f in enumerate(args)])))
+
+
+def hypothesis_part_2(confirmed, deaths):
+    deaths_chi = deaths.copy()
+    deaths_chi = deaths_chi.sum(axis=1)
+    confirmed = confirmed.sum(axis=1)
+
+    chi2, p = chisquare(deaths_chi, confirmed)
+    print(f'chi2: {chi2}, p-val: {p}')
+
+    deaths.columns = pd.to_datetime(deaths.columns)
+    deaths = deaths.groupby([deaths.columns.year, deaths.columns.month], axis=1).sum()
+    print(deaths)
 
 
 if __name__ == "__main__":
-    active, coords = zad1()
+    active, coords, confirmed, deaths_r = zad1()
     # active_factor = zad2(active)
 
-    #active_factor = pd.DataFrame(pd.read_csv("reproduction.csv", index_col='Country/Region'))
-    #frames = weather_data()
-    #hypothesis(active_factor, frames, coords)
-
+    active_factor = pd.DataFrame(pd.read_csv("reproduction.csv", index_col='Country/Region'))
+    frames = weather_data()
+    hypothesis(active_factor, frames, coords)
+    # hypothesis_part_2(confirmed, deaths_r)
 
