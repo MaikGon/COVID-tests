@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import netCDF4
 from netCDF4 import Dataset
 from scipy.stats import f_oneway
@@ -9,6 +8,7 @@ from dateutil.relativedelta import relativedelta
 from time import perf_counter
 import math
 from scipy.stats import chisquare
+from statsmodels.stats.power import TTestIndPower
 
 
 def load_data(data):
@@ -128,7 +128,7 @@ def weather_data():
         w_mean.columns = columns
         w_mean.index = indexes
         frames.append(w_mean)
-        # break # only for faster calcs - delete later
+        break # only for faster calcs - delete later
 
     stop = perf_counter()
     print('Elapsed time: ', str(stop-start))
@@ -221,6 +221,12 @@ def hypothesis(data, frames, coords):
             if p_value <= alfa:
                 print(pairwise_tukeyhsd(np.concatenate([*args]), np.concatenate(
                     [[names[ind]] * len(f) for ind, f in enumerate(args)])))
+
+                # "false = Przy tej liczebności nie da się wykazać, że istnieje różnica"
+                analysis = TTestIndPower()
+                effect = (np.mean(data_1) - np.mean(data_2)) / ((np.std(data_1) + np.std(data_2)) / 2)
+                result = analysis.solve_power(effect, power=None, nobs1=len(data_1), ratio=1.0, alpha=alfa)
+                print("Moc zbioru (prawdopodobieństwo niepopełnienia błędu) ", result)
 
 
 def hypothesis_part_2(confirmed, deaths):
