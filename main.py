@@ -222,6 +222,9 @@ def hypothesis(data, frames, coords):
                 print('Możemy odrzucić hipotezę o normalności rozkładów')
             else:
                 print('Nie można odrzucić hipotezy o normalności rozkładów')
+            print('Wariancje:')
+            for arg in args:
+                print(np.std(arg))
 
             f_value, p_value = f_oneway(*args)
             print(f'Month: {ind+1}, F-stat: {f_value}, p-val: {p_value}')
@@ -247,11 +250,27 @@ def hypothesis(data, frames, coords):
 
 
 def hypothesis_part_2(confirmed, deaths):
+    not_europe = []
+    for ctr in confirmed.index:
+        try:
+            country_code = pc.country_name_to_country_alpha2(ctr, cn_name_format="default")
+            continent_name = pc.country_alpha2_to_continent_code(country_code)
+            if continent_name != 'EU':
+                not_europe.append(ctr)
+        except:
+            if ctr != 'Kosovo':
+                not_europe.append(ctr)
+
+    confirmed.drop(not_europe, axis=0, inplace=True)
+    deaths.drop(not_europe, axis=0, inplace=True)
+
+
     deaths_chi = deaths.copy()
     deaths_chi = deaths_chi.sum(axis=1)
     confirmed = confirmed.sum(axis=1)
 
-    chi2, p = chisquare(deaths_chi, confirmed)
+    obs = np.array([deaths_chi, confirmed]).T
+    chi2, p = chisquare(obs)
     print(f'chi2: {chi2}, p-val: {p}')
 
     deaths.columns = pd.to_datetime(deaths.columns)
@@ -263,8 +282,8 @@ if __name__ == "__main__":
     active, coords, confirmed, deaths_r = zad1()
     # active_factor = zad2(active)
 
-    active_factor = pd.DataFrame(pd.read_csv("reproduction.csv", index_col='Country/Region'))
-    frames = weather_data()
-    hypothesis(active_factor, frames, coords)
+    #active_factor = pd.DataFrame(pd.read_csv("reproduction.csv", index_col='Country/Region'))
+    #frames = weather_data()
+    #hypothesis(active_factor, frames, coords)
     hypothesis_part_2(confirmed, deaths_r)
 
