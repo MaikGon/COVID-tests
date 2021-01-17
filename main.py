@@ -7,7 +7,7 @@ from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from dateutil.relativedelta import relativedelta
 from time import perf_counter
 import math
-from scipy.stats import chisquare, normaltest
+from scipy.stats import chi2_contingency, normaltest
 from statsmodels.stats.power import TTestIndPower
 import pycountry_convert as pc
 
@@ -264,18 +264,24 @@ def hypothesis_part_2(confirmed, deaths):
     confirmed.drop(not_europe, axis=0, inplace=True)
     deaths.drop(not_europe, axis=0, inplace=True)
 
-
     deaths_chi = deaths.copy()
     deaths_chi = deaths_chi.sum(axis=1)
     confirmed = confirmed.sum(axis=1)
 
-    obs = np.array([deaths_chi, confirmed]).T
-    chi2, p = chisquare(obs)
-    print(f'chi2: {chi2}, p-val: {p}')
+    obs = []
+    for ctr in confirmed.index:
+        conf = confirmed[ctr]
+        deat = deaths_chi[ctr]
+        obs.append([conf, deat])
+    # obs = np.array(obs)
+    # print(obs)
+    chi2, p, dof, ex = chi2_contingency(obs)
+    print('chi2: ', chi2, '\n', 'p: ', p, '\n', 'dof: ', dof, '\n', 'ex: ', ex)
+    print("Wartość p = 0, a więc możemy stwierdzić, że są istotne róznice w śmiertelności pomiędzy krajami w Europie")
 
     deaths.columns = pd.to_datetime(deaths.columns)
     deaths = deaths.groupby([deaths.columns.year, deaths.columns.month], axis=1).sum()
-    print(deaths)
+    # print(deaths)
 
 
 if __name__ == "__main__":
