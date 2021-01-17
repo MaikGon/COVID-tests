@@ -250,6 +250,7 @@ def hypothesis(data, frames, coords):
 
 
 def hypothesis_part_2(confirmed, deaths):
+    analysis = TTestIndPower()
     not_europe = []
     for ctr in confirmed.index:
         try:
@@ -273,15 +274,58 @@ def hypothesis_part_2(confirmed, deaths):
         conf = confirmed[ctr]
         deat = deaths_chi[ctr]
         obs.append([conf, deat])
-    # obs = np.array(obs)
-    # print(obs)
+
     chi2, p, dof, ex = chi2_contingency(obs)
-    print('chi2: ', chi2, '\n', 'p: ', p, '\n', 'dof: ', dof, '\n', 'ex: ', ex)
-    print("Wartość p = 0, a więc możemy stwierdzić, że są istotne róznice w śmiertelności pomiędzy krajami w Europie")
+    #print('chi2: ', chi2, '\n', 'p: ', p, '\n', 'dof: ', dof, '\n', 'ex: ', ex)
+    #print("Wartość p = 0, a więc możemy stwierdzić, że są istotne róznice w śmiertelności pomiędzy krajami w Europie")
 
     deaths.columns = pd.to_datetime(deaths.columns)
     deaths = deaths.groupby([deaths.columns.year, deaths.columns.month], axis=1).sum()
-    # print(deaths)
+
+    args = []
+    names = []
+    alfa = 0.05
+    counter = 1
+    for col in deaths.columns:
+        args.append(deaths.loc[:, col].values)
+        if counter == 12:
+            name = 'month_1_2021'
+        name = 'month_' + str(counter)
+        names.append(name)
+        counter += 1
+
+    d = np.concatenate([*args])
+    k2, p = normaltest(d)
+
+    if p < alfa:
+        print('Możemy odrzucić hipotezę o normalności rozkładów')
+    else:
+        print('Nie można odrzucić hipotezy o normalności rozkładów')
+    print('Wariancje:')
+    for arg in args:
+        print(np.std(arg))
+
+    f_value, p_value = f_oneway(*args)
+    print(f'F-stat: {f_value}, p-val: {p_value}')
+    if p_value <= alfa:
+        tukey = pairwise_tukeyhsd(np.concatenate([*args]), np.concatenate(
+            [[names[ind]] * len(f) for ind, f in enumerate(args)]))
+        print('\n', tukey, '\n')
+        dt_frame = pd.DataFrame(data=tukey._results_table.data[1:], columns=tukey._results_table.data[0])
+
+        for idx in dt_frame.index:
+            # If True in column 'reject' -> significant difference
+            if dt_frame['reject'][idx]:
+                print('Istotna różnica w miesiącach: ', str(dt_frame['group1'][idx]), str(dt_frame['group2'][idx]))
+                d1 = int(str(dt_frame['group1'][idx])[-1]) + 1
+                d2 = int(str(dt_frame['group2'][idx])[-1]) + 1
+
+                effect = (np.mean(args[int(d1)]) - np.mean(args[int(d2)])) / (
+                            (np.std(args[int(d1)]) + np.std(args[int(d2)])) / 2)
+                result = analysis.solve_power(effect, power=None, nobs1=len(args[int(d1)]),
+                                              ratio=len(args[int(d2)]) / len(args[int(d1)]), alpha=alfa)
+                print("Moc zbioru (prawdopodobieństwo niepopełnienia błędu) ", result, '\n')
+
 
 
 if __name__ == "__main__":
