@@ -7,8 +7,9 @@ from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from dateutil.relativedelta import relativedelta
 from time import perf_counter
 import math
-from scipy.stats import chisquare
+from scipy.stats import chisquare, normaltest
 from statsmodels.stats.power import TTestIndPower
+import pycountry_convert as pc
 
 
 def load_data(data):
@@ -113,7 +114,6 @@ def zad2(active):
 
 
 def weather_data():
-    start = perf_counter()
     weather_max = Dataset('TerraClimate_tmax_2018.nc')
     weather_min = Dataset('TerraClimate_tmin_2018.nc')
     frames = []
@@ -130,15 +130,13 @@ def weather_data():
         frames.append(w_mean)
         break # only for faster calcs - delete later
 
-    stop = perf_counter()
-    print('Elapsed time: ', str(stop-start))
     return frames
 
 
 def hypothesis(data, frames, coords):
+    analysis = TTestIndPower()
 
     # Discrete values
-    start = perf_counter()
     for frame in frames:
         for col in frame.columns:
             frame.loc[frame[col] < 0, col] = 0
@@ -146,13 +144,11 @@ def hypothesis(data, frames, coords):
             frame.loc[(frame[col] >= 10) & (frame[col] < 20), col] = 2
             frame.loc[(frame[col] >= 20) & (frame[col] < 30), col] = 3
             frame.loc[frame[col] >= 30, col] = 4
-    stop = perf_counter()
-    print('Elapsed time: ', str(stop-start))
 
-    # Normalize data
     data.columns = pd.to_datetime(data.columns)
     data = data.groupby([data.columns.year, data.columns.month], axis=1).mean()
 
+    # Normalize data
     for country in data.index:
         l_ist = max(data.loc[country].replace(np.inf, 0).fillna(0).tolist())
         data.loc[country] = data.loc[country] / l_ist
@@ -165,6 +161,7 @@ def hypothesis(data, frames, coords):
         ctr_found = []
         temp_values = []
         for ctr in data.index:
+            # find values from second array by lat and long
             long_closest = np.abs(frame.columns - data['Long'][ctr]).argmin()
             long_found = list(frame.columns)[long_closest]
 
@@ -197,7 +194,9 @@ def hypothesis(data, frames, coords):
 
         args = []
         names = []
+        all_array = [data_0, data_1, data_2, data_3, data_4]  # for further task
 
+        # Add only not empty arrays
         if data_0:
             args.append(data_0)
             names.append('data_0')
@@ -214,19 +213,37 @@ def hypothesis(data, frames, coords):
             args.append(data_4)
             names.append('data_4')
 
+        # If there are minimum 2 datasets
         if len(args) >= 2:
+            d = np.concatenate([*args])
+            k2, p = normaltest(d)
+
+            if p < alfa:
+                print('Możemy odrzucić hipotezę o normalności rozkładów')
+            else:
+                print('Nie można odrzucić hipotezy o normalności rozkładów')
+
             f_value, p_value = f_oneway(*args)
             print(f'Month: {ind+1}, F-stat: {f_value}, p-val: {p_value}')
 
             if p_value <= alfa:
-                print(pairwise_tukeyhsd(np.concatenate([*args]), np.concatenate(
-                    [[names[ind]] * len(f) for ind, f in enumerate(args)])))
+                tukey = pairwise_tukeyhsd(np.concatenate([*args]), np.concatenate(
+                    [[names[ind]] * len(f) for ind, f in enumerate(args)]))
+                print('\n', tukey, '\n')
+                dt_frame = pd.DataFrame(data=tukey._results_table.data[1:], columns=tukey._results_table.data[0])
 
-                # "false = Przy tej liczebności nie da się wykazać, że istnieje różnica"
-                analysis = TTestIndPower()
-                effect = (np.mean(data_1) - np.mean(data_2)) / ((np.std(data_1) + np.std(data_2)) / 2)
-                result = analysis.solve_power(effect, power=None, nobs1=len(data_1), ratio=1.0, alpha=alfa)
-                print("Moc zbioru (prawdopodobieństwo niepopełnienia błędu) ", result)
+                for idx in dt_frame.index:
+                    # If True in column 'reject' -> significant difference
+                    if dt_frame['reject'][idx]:
+                        print('Istotna różnica w zbiorze: ', str(dt_frame['group1'][idx]), str(dt_frame['group2'][idx]))
+                        d1 = str(dt_frame['group1'][idx])[-1]
+                        d2 = str(dt_frame['group2'][idx])[-1]
+
+                        effect = (np.mean(all_array[int(d1)]) - np.mean(all_array[int(d2)])) / ((np.std(all_array[int(d1)]) + np.std(all_array[int(d2)])) / 2)
+                        result = analysis.solve_power(effect, power=None, nobs1=len(all_array[int(d1)]), ratio=len(all_array[int(d2)])/len(all_array[int(d1)]), alpha=alfa)
+                        print("Moc zbioru (prawdopodobieństwo niepopełnienia błędu) ", result)
+                        print('Na podstawie zbioru ', str(dt_frame['group1'][idx]), ' oraz ', str(dt_frame['group2'][idx]),
+                              ' możemy stwierdzić z prawdopodobieństwem ', str(result), ', że temperatura wpływa na szybkość rozprzestrzeniania się wirusa.', '\n')
 
 
 def hypothesis_part_2(confirmed, deaths):
@@ -249,5 +266,5 @@ if __name__ == "__main__":
     active_factor = pd.DataFrame(pd.read_csv("reproduction.csv", index_col='Country/Region'))
     frames = weather_data()
     hypothesis(active_factor, frames, coords)
-    # hypothesis_part_2(confirmed, deaths_r)
+    hypothesis_part_2(confirmed, deaths_r)
 
