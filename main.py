@@ -59,7 +59,6 @@ def zad1():
             erase_deaths.append(ctr)
             # print(ctr, deaths_check.loc[ctr])
 
-    print(erase_deaths)
     # drop countires without death record
     confirmed.drop(erase_deaths, axis=0, inplace=True)
     deaths.drop(erase_deaths, axis=0, inplace=True)
@@ -136,6 +135,14 @@ def weather_data():
 
 def hypothesis(data, frames, coords):
     analysis = TTestIndPower()
+    # Dict for further tasks
+    data_dict = {
+        0: "'< 0'",
+        1: "'0 - 10'",
+        2: "'10 - 20'",
+        3: "'20 - 30'",
+        4: "'> 30'"
+    }
 
     # Discrete values
     for frame in frames:
@@ -145,7 +152,6 @@ def hypothesis(data, frames, coords):
             frame.loc[(frame[col] >= 10) & (frame[col] < 20), col] = 2
             frame.loc[(frame[col] >= 20) & (frame[col] < 30), col] = 3
             frame.loc[frame[col] >= 30, col] = 4
-
 
     data.columns = pd.to_datetime(data.columns)
     data = data.groupby([data.columns.year, data.columns.month], axis=1).mean()
@@ -238,14 +244,15 @@ def hypothesis(data, frames, coords):
                     # If True in column 'reject' -> significant difference
                     if dt_frame['reject'][idx]:
                         print('Istotna różnica w zbiorze: ', str(dt_frame['group1'][idx]), str(dt_frame['group2'][idx]))
-                        d1 = str(dt_frame['group1'][idx])[-1]
-                        d2 = str(dt_frame['group2'][idx])[-1]
+                        d1 = int(str(dt_frame['group1'][idx])[-1])
+                        d2 = int(str(dt_frame['group2'][idx])[-1])
 
                         effect = (np.mean(all_array[int(d1)]) - np.mean(all_array[int(d2)])) / ((np.std(all_array[int(d1)]) + np.std(all_array[int(d2)])) / 2)
                         result = analysis.solve_power(effect, power=None, nobs1=len(all_array[int(d1)]), ratio=len(all_array[int(d2)])/len(all_array[int(d1)]), alpha=alfa)
                         print("Moc zbioru (prawdopodobieństwo niepopełnienia błędu) ", result)
-                        print('Na podstawie zbioru ', str(dt_frame['group1'][idx]), ' oraz ', str(dt_frame['group2'][idx]),
-                              ' możemy stwierdzić z prawdopodobieństwem ', str(result), ', że temperatura wpływa na szybkość rozprzestrzeniania się wirusa.', '\n')
+                        print('Pomiędzy przedziałami temperatur', data_dict[d1], ' oraz ', data_dict[d2],
+                              'zauważono istotne różnice. Możemy stwierdzić z prawdopodobieństwem '
+                              , str(result), ', że temperatura wpływa na szybkość rozprzestrzeniania się wirusa.', '\n')
 
 
 def hypothesis_part_2(confirmed, deaths, death_rate):
@@ -328,6 +335,9 @@ def hypothesis_part_2(confirmed, deaths, death_rate):
                     result = analysis.solve_power(effect, power=None, nobs1=len(args[idx1]),
                                                   ratio=len(args[idx2]) / len(args[idx1]), alpha=alfa)
                     print("Moc zbioru (prawdopodobieństwo niepopełnienia błędu) ", result, '\n')
+                    print('Pomiędzy krajami', str(dt_frame['group1'][idx]), ' oraz ', str(dt_frame['group2'][idx]),
+                          'zauważono istotne różnice. Możemy stwierdzić z prawdopodobieństwem '
+                          , str(result), ', że między poszczególnymi krajami w Europie istnieją istotne różnice w śmiertelności.', '\n')
 
 
 if __name__ == "__main__":
@@ -338,7 +348,7 @@ if __name__ == "__main__":
     active_factor = pd.DataFrame(pd.read_csv("reproduction.csv", index_col='Country/Region'))
     frames = weather_data()
     hypothesis(active_factor, frames, coords)
-    #hypothesis_part_2(confirmed, deaths_r, death_rate)
+    hypothesis_part_2(confirmed, deaths_r, death_rate)
     stop = perf_counter()
     print('Elapsed time: ', str(stop - start))
 
