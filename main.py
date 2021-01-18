@@ -74,13 +74,12 @@ def zad1():
     death_rate = deaths_r.divide(rec_death)
     #print('Death_rate: ', death_rate)
 
-
     # Active cases
     active = confirmed.subtract(deaths).subtract(recovered)
     active.columns = pd.to_datetime(active.columns)
     #print('Active cases: ', active)
 
-    return active, coords, confirmed, deaths
+    return active, coords, confirmed, deaths, death_rate
 
 
 def zad2(active):
@@ -88,7 +87,7 @@ def zad2(active):
     active_factor = active.copy()
 
     for ctr in active_seven.index:  # Country
-        print(ctr)
+        # print(ctr)
         for i in range(6, len(active_seven.columns)):
             last_7 = 0.0
             days = 0.0
@@ -107,7 +106,7 @@ def zad2(active):
 
     for i in range(11): # 6+5
         active_factor.drop([active_factor.columns[0]], axis=1, inplace=True)
-    print(active_factor)
+    # print(active_factor)
     active_factor.to_csv("reproduction.csv")
 
     return active_factor
@@ -218,6 +217,8 @@ def hypothesis(data, frames, coords):
             d = np.concatenate([*args])
             k2, p = normaltest(d)
 
+            print(f'Month: {ind + 1}')
+            print('p = ', p)
             if p < alfa:
                 print('Możemy odrzucić hipotezę o normalności rozkładów')
             else:
@@ -227,12 +228,12 @@ def hypothesis(data, frames, coords):
                 print(np.std(arg))
 
             f_value, p_value = f_oneway(*args)
-            print(f'Month: {ind+1}, F-stat: {f_value}, p-val: {p_value}')
+            print(f'F-stat: {f_value}, p-val: {p_value}', '\n')
 
-            if p_value <= alfa:
+            if p_value < alfa:
                 tukey = pairwise_tukeyhsd(np.concatenate([*args]), np.concatenate(
                     [[names[ind]] * len(f) for ind, f in enumerate(args)]))
-                print('\n', tukey, '\n')
+                print(tukey, '\n')
                 dt_frame = pd.DataFrame(data=tukey._results_table.data[1:], columns=tukey._results_table.data[0])
 
                 for idx in dt_frame.index:
@@ -248,8 +249,21 @@ def hypothesis(data, frames, coords):
                         print('Na podstawie zbioru ', str(dt_frame['group1'][idx]), ' oraz ', str(dt_frame['group2'][idx]),
                               ' możemy stwierdzić z prawdopodobieństwem ', str(result), ', że temperatura wpływa na szybkość rozprzestrzeniania się wirusa.', '\n')
 
+                    else:
+                        print('W zbiorze: ', str(dt_frame['group1'][idx]), str(dt_frame['group2'][idx]), 'nie ma istotnych różnic')
+                        d1 = str(dt_frame['group1'][idx])[-1]
+                        d2 = str(dt_frame['group2'][idx])[-1]
 
-def hypothesis_part_2(confirmed, deaths):
+                        effect = (np.mean(all_array[int(d1)]) - np.mean(all_array[int(d2)])) / (
+                                    (np.std(all_array[int(d1)]) + np.std(all_array[int(d2)])) / 2)
+                        power = 0.8
+                        result = analysis.solve_power(effect, power=power, nobs1=None,
+                                                      ratio=len(all_array[int(d2)]) / len(all_array[int(d1)]),
+                                                      alpha=alfa)
+                        print("Zbiór powinien mieć wielkość = ", result)
+
+
+def hypothesis_part_2(confirmed, deaths, death_rate):
     analysis = TTestIndPower()
     not_europe = []
     for ctr in confirmed.index:
@@ -264,39 +278,42 @@ def hypothesis_part_2(confirmed, deaths):
 
     confirmed.drop(not_europe, axis=0, inplace=True)
     deaths.drop(not_europe, axis=0, inplace=True)
+    death_rate.drop(not_europe, axis=0, inplace=True)
 
     deaths_chi = deaths.copy()
     deaths_chi = deaths_chi.sum(axis=1)
     confirmed = confirmed.sum(axis=1)
 
+    alfa = 0.05
     obs = []
+
     for ctr in confirmed.index:
         conf = confirmed[ctr]
         deat = deaths_chi[ctr]
         obs.append([conf, deat])
 
     chi2, p, dof, ex = chi2_contingency(obs)
-    #print('chi2: ', chi2, '\n', 'p: ', p, '\n', 'dof: ', dof, '\n', 'ex: ', ex)
-    #print("Wartość p = 0, a więc możemy stwierdzić, że są istotne róznice w śmiertelności pomiędzy krajami w Europie")
-
-    deaths.columns = pd.to_datetime(deaths.columns)
-    deaths = deaths.groupby([deaths.columns.year, deaths.columns.month], axis=1).sum()
+    # print('chi2: ', chi2, '\n', 'p: ', p, '\n', 'dof: ', dof, '\n', 'ex: ', ex)
+    print('\n', 'p = ', p)
+    if p < alfa:
+        print('Wartość p = ', p, ',a więc możemy stwierdzić, że są istotne róznice w śmiertelności pomiędzy krajami w Europie')
+    else:
+        print('Wartość p = ', p, ',a więc nie możemy stwierdzić, czy są istotne róznice w śmiertelności pomiędzy krajami w Europie')
 
     args = []
     names = []
-    alfa = 0.05
-    counter = 1
-    for col in deaths.columns:
-        args.append(deaths.loc[:, col].values)
-        if counter == 12:
-            name = 'month_1_2021'
-        name = 'month_' + str(counter)
-        names.append(name)
-        counter += 1
+
+    death_rate = death_rate.replace(np.inf, np.nan)
+
+    for ctr in death_rate.index:
+        deaths = death_rate.loc[ctr, :].dropna().tolist()
+        args.append(deaths)
+        names.append(ctr)
 
     d = np.concatenate([*args])
     k2, p = normaltest(d)
 
+    print('p = ', p)
     if p < alfa:
         print('Możemy odrzucić hipotezę o normalności rozkładów')
     else:
@@ -307,7 +324,7 @@ def hypothesis_part_2(confirmed, deaths):
 
     f_value, p_value = f_oneway(*args)
     print(f'F-stat: {f_value}, p-val: {p_value}')
-    if p_value <= alfa:
+    if p_value < alfa:
         tukey = pairwise_tukeyhsd(np.concatenate([*args]), np.concatenate(
             [[names[ind]] * len(f) for ind, f in enumerate(args)]))
         print('\n', tukey, '\n')
@@ -315,25 +332,45 @@ def hypothesis_part_2(confirmed, deaths):
 
         for idx in dt_frame.index:
             # If True in column 'reject' -> significant difference
+
             if dt_frame['reject'][idx]:
-                print('Istotna różnica w miesiącach: ', str(dt_frame['group1'][idx]), str(dt_frame['group2'][idx]))
-                d1 = int(str(dt_frame['group1'][idx])[-1]) + 1
-                d2 = int(str(dt_frame['group2'][idx])[-1]) + 1
+                print('Istotna różnica w krajach: ', str(dt_frame['group1'][idx]), str(dt_frame['group2'][idx]))
+                d1 = str(dt_frame['group1'][idx])
+                d2 = str(dt_frame['group2'][idx])
+                idx1 = names.index(d1)
+                idx2 = names.index(d2)
 
-                effect = (np.mean(args[int(d1)]) - np.mean(args[int(d2)])) / (
-                            (np.std(args[int(d1)]) + np.std(args[int(d2)])) / 2)
-                result = analysis.solve_power(effect, power=None, nobs1=len(args[int(d1)]),
-                                              ratio=len(args[int(d2)]) / len(args[int(d1)]), alpha=alfa)
+                effect = (np.mean(args[idx1]) - np.mean(args[idx2])) / (
+                            (np.std(args[idx1]) + np.std(args[idx2])) / 2)
+                result = analysis.solve_power(effect, power=None, nobs1=len(args[idx1]),
+                                              ratio=len(args[idx2]) / len(args[idx1]), alpha=alfa)
                 print("Moc zbioru (prawdopodobieństwo niepopełnienia błędu) ", result, '\n')
+            else:
+                print('W krajach: ', str(dt_frame['group1'][idx]), str(dt_frame['group2'][idx]),
+                      'nie można stwierdzić czy są istotne różnice')
+                d1 = str(dt_frame['group1'][idx])
+                d2 = str(dt_frame['group2'][idx])
+                idx1 = names.index(d1)
+                idx2 = names.index(d2)
 
+                effect = (np.mean(args[idx1]) - np.mean(args[idx2])) / (
+                            (np.std(args[idx1]) + np.std(args[idx2])) / 2)
+                power = 0.8
+                result = analysis.solve_power(effect, power=power, nobs1=None,
+                                              ratio=len(args[idx2]) / len(args[idx1]), alpha=alfa)
+
+                print("Zbiór powinien mieć wielkość = ", result, '\n')
 
 
 if __name__ == "__main__":
-    active, coords, confirmed, deaths_r = zad1()
+    start = perf_counter()
+    active, coords, confirmed, deaths_r, death_rate = zad1()
     # active_factor = zad2(active)
 
-    #active_factor = pd.DataFrame(pd.read_csv("reproduction.csv", index_col='Country/Region'))
-    #frames = weather_data()
+    active_factor = pd.DataFrame(pd.read_csv("reproduction.csv", index_col='Country/Region'))
+    frames = weather_data()
     #hypothesis(active_factor, frames, coords)
-    hypothesis_part_2(confirmed, deaths_r)
+    hypothesis_part_2(confirmed, deaths_r, death_rate)
+    stop = perf_counter()
+    print('Elapsed time: ', str(stop - start))
 
