@@ -59,10 +59,12 @@ def zad1():
             erase_deaths.append(ctr)
             # print(ctr, deaths_check.loc[ctr])
 
+    print(erase_deaths)
     # drop countires without death record
     confirmed.drop(erase_deaths, axis=0, inplace=True)
     deaths.drop(erase_deaths, axis=0, inplace=True)
     recovered.drop(erase_deaths, axis=0, inplace=True)
+    coords.drop(erase_deaths, axis=0, inplace=True)
 
     rec_death = recovered.copy()
     rec_death = rec_death.groupby([rec_death.columns.year, rec_death.columns.month], axis=1).sum()
@@ -127,7 +129,7 @@ def weather_data():
         w_mean.columns = columns
         w_mean.index = indexes
         frames.append(w_mean)
-        break # only for faster calcs - delete later
+        # break # only for faster calcs - delete later
 
     return frames
 
@@ -144,6 +146,7 @@ def hypothesis(data, frames, coords):
             frame.loc[(frame[col] >= 20) & (frame[col] < 30), col] = 3
             frame.loc[frame[col] >= 30, col] = 4
 
+
     data.columns = pd.to_datetime(data.columns)
     data = data.groupby([data.columns.year, data.columns.month], axis=1).mean()
 
@@ -156,73 +159,68 @@ def hypothesis(data, frames, coords):
     data = pd.concat([data, coords], axis=1)
 
     alfa = 0.05
-    for ind, frame in enumerate(frames):
-        ctr_found = []
-        temp_values = []
-        for ctr in data.index:
-            # find values from second array by lat and long
-            long_closest = np.abs(frame.columns - data['Long'][ctr]).argmin()
-            long_found = list(frame.columns)[long_closest]
+    ctr_found = []
+    temp_values = []
+    for ctr in data.index:
+        # find values from second array by lat and long
+        long_closest = np.abs(frames[0].columns - data['Long'][ctr]).argmin()
+        long_found = list(frames[0].columns)[long_closest]
 
-            lat_closest = np.abs(frame.index - data['Lat'][ctr]).argmin()
-            lat_found = list(frame.index)[lat_closest]
+        lat_closest = np.abs(frames[0].index - data['Lat'][ctr]).argmin()
+        lat_found = list(frames[0].index)[lat_closest]
 
+        for ind, frame in enumerate(frames):
             ctr_found.append(frame.loc[lat_found, long_found])
-
             year = 2020
             month = ind + 1
             if ind == 0:
                 year = 2021
                 month = 1
-
             temp_values.append(data[(year, month)][ctr])
 
-        data_0, data_1, data_2, data_3, data_4 = [], [], [], [], []
+    data_0, data_1, data_2, data_3, data_4 = [], [], [], [], []
 
-        for inde, val in enumerate(ctr_found):
-            if val == 0 and not math.isnan(temp_values[inde]):
-                data_0.append(temp_values[inde])
-            elif val == 1 and not math.isnan(temp_values[inde]):
-                data_1.append(temp_values[inde])
-            elif val == 2 and not math.isnan(temp_values[inde]):
-                data_2.append(temp_values[inde])
-            elif val == 3 and not math.isnan(temp_values[inde]):
-                data_3.append(temp_values[inde])
-            elif val == 4 and not math.isnan(temp_values[inde]):
-                data_4.append(temp_values[inde])
+    for inde, val in enumerate(ctr_found):
+        if val == 0 and not math.isnan(temp_values[inde]):
+            data_0.append(temp_values[inde])
+        elif val == 1 and not math.isnan(temp_values[inde]):
+            data_1.append(temp_values[inde])
+        elif val == 2 and not math.isnan(temp_values[inde]):
+            data_2.append(temp_values[inde])
+        elif val == 3 and not math.isnan(temp_values[inde]):
+            data_3.append(temp_values[inde])
+        elif val == 4 and not math.isnan(temp_values[inde]):
+            data_4.append(temp_values[inde])
 
-        args = []
-        names = []
-        all_array = [data_0, data_1, data_2, data_3, data_4]  # for further task
+    args = []
+    names = []
+    all_array = [data_0, data_1, data_2, data_3, data_4]  # for further task
 
-        # Add only not empty arrays
-        if data_0:
-            args.append(data_0)
-            names.append('data_0')
-        if data_1:
-            args.append(data_1)
-            names.append('data_1')
-        if data_2:
-            args.append(data_2)
-            names.append('data_2')
-        if data_3:
-            args.append(data_3)
-            names.append('data_3')
-        if data_4:
-            args.append(data_4)
-            names.append('data_4')
+    # Add only not empty arrays
+    if data_0:
+        args.append(data_0)
+        names.append('data_0')
+    if data_1:
+        args.append(data_1)
+        names.append('data_1')
+    if data_2:
+        args.append(data_2)
+        names.append('data_2')
+    if data_3:
+        args.append(data_3)
+        names.append('data_3')
+    if data_4:
+        args.append(data_4)
+        names.append('data_4')
 
-        # If there are minimum 2 datasets
-        if len(args) >= 2:
-            d = np.concatenate([*args])
-            k2, p = normaltest(d)
+    # If there are minimum 2 datasets
+    if len(args) >= 2:
+        d = np.concatenate([*args])
+        k2, p = normaltest(d)
 
-            print(f'Month: {ind + 1}')
-            print('p = ', p)
-            if p < alfa:
-                print('Możemy odrzucić hipotezę o normalności rozkładów')
-            else:
-                print('Nie można odrzucić hipotezy o normalności rozkładów')
+        print('p = ', p)
+        if p < alfa:
+            print('Możemy odrzucić hipotezę o nie normalności rozkładów')
             print('Wariancje:')
             for arg in args:
                 print(np.std(arg))
@@ -248,19 +246,6 @@ def hypothesis(data, frames, coords):
                         print("Moc zbioru (prawdopodobieństwo niepopełnienia błędu) ", result)
                         print('Na podstawie zbioru ', str(dt_frame['group1'][idx]), ' oraz ', str(dt_frame['group2'][idx]),
                               ' możemy stwierdzić z prawdopodobieństwem ', str(result), ', że temperatura wpływa na szybkość rozprzestrzeniania się wirusa.', '\n')
-
-                    else:
-                        print('W zbiorze: ', str(dt_frame['group1'][idx]), str(dt_frame['group2'][idx]), 'nie ma istotnych różnic')
-                        d1 = str(dt_frame['group1'][idx])[-1]
-                        d2 = str(dt_frame['group2'][idx])[-1]
-
-                        effect = (np.mean(all_array[int(d1)]) - np.mean(all_array[int(d2)])) / (
-                                    (np.std(all_array[int(d1)]) + np.std(all_array[int(d2)])) / 2)
-                        power = 0.8
-                        result = analysis.solve_power(effect, power=power, nobs1=None,
-                                                      ratio=len(all_array[int(d2)]) / len(all_array[int(d1)]),
-                                                      alpha=alfa)
-                        print("Zbiór powinien mieć wielkość = ", result)
 
 
 def hypothesis_part_2(confirmed, deaths, death_rate):
@@ -315,51 +300,34 @@ def hypothesis_part_2(confirmed, deaths, death_rate):
 
     print('p = ', p)
     if p < alfa:
-        print('Możemy odrzucić hipotezę o normalności rozkładów')
-    else:
-        print('Nie można odrzucić hipotezy o normalności rozkładów')
-    print('Wariancje:')
-    for arg in args:
-        print(np.std(arg))
+        print('Możemy odrzucić hipotezę o nie normalności rozkładów')
+        print('Wariancje:')
+        for arg in args:
+            print(np.std(arg))
 
-    f_value, p_value = f_oneway(*args)
-    print(f'F-stat: {f_value}, p-val: {p_value}')
-    if p_value < alfa:
-        tukey = pairwise_tukeyhsd(np.concatenate([*args]), np.concatenate(
-            [[names[ind]] * len(f) for ind, f in enumerate(args)]))
-        print('\n', tukey, '\n')
-        dt_frame = pd.DataFrame(data=tukey._results_table.data[1:], columns=tukey._results_table.data[0])
+        f_value, p_value = f_oneway(*args)
+        print(f'F-stat: {f_value}, p-val: {p_value}')
+        if p_value < alfa:
+            tukey = pairwise_tukeyhsd(np.concatenate([*args]), np.concatenate(
+                [[names[ind]] * len(f) for ind, f in enumerate(args)]))
+            print('\n', tukey, '\n')
+            dt_frame = pd.DataFrame(data=tukey._results_table.data[1:], columns=tukey._results_table.data[0])
 
-        for idx in dt_frame.index:
-            # If True in column 'reject' -> significant difference
+            for idx in dt_frame.index:
+                # If True in column 'reject' -> significant difference
 
-            if dt_frame['reject'][idx]:
-                print('Istotna różnica w krajach: ', str(dt_frame['group1'][idx]), str(dt_frame['group2'][idx]))
-                d1 = str(dt_frame['group1'][idx])
-                d2 = str(dt_frame['group2'][idx])
-                idx1 = names.index(d1)
-                idx2 = names.index(d2)
+                if dt_frame['reject'][idx]:
+                    print('Istotna różnica w krajach: ', str(dt_frame['group1'][idx]), str(dt_frame['group2'][idx]))
+                    d1 = str(dt_frame['group1'][idx])
+                    d2 = str(dt_frame['group2'][idx])
+                    idx1 = names.index(d1)
+                    idx2 = names.index(d2)
 
-                effect = (np.mean(args[idx1]) - np.mean(args[idx2])) / (
-                            (np.std(args[idx1]) + np.std(args[idx2])) / 2)
-                result = analysis.solve_power(effect, power=None, nobs1=len(args[idx1]),
-                                              ratio=len(args[idx2]) / len(args[idx1]), alpha=alfa)
-                print("Moc zbioru (prawdopodobieństwo niepopełnienia błędu) ", result, '\n')
-            else:
-                print('W krajach: ', str(dt_frame['group1'][idx]), str(dt_frame['group2'][idx]),
-                      'nie można stwierdzić czy są istotne różnice')
-                d1 = str(dt_frame['group1'][idx])
-                d2 = str(dt_frame['group2'][idx])
-                idx1 = names.index(d1)
-                idx2 = names.index(d2)
-
-                effect = (np.mean(args[idx1]) - np.mean(args[idx2])) / (
-                            (np.std(args[idx1]) + np.std(args[idx2])) / 2)
-                power = 0.8
-                result = analysis.solve_power(effect, power=power, nobs1=None,
-                                              ratio=len(args[idx2]) / len(args[idx1]), alpha=alfa)
-
-                print("Zbiór powinien mieć wielkość = ", result, '\n')
+                    effect = (np.mean(args[idx1]) - np.mean(args[idx2])) / (
+                                (np.std(args[idx1]) + np.std(args[idx2])) / 2)
+                    result = analysis.solve_power(effect, power=None, nobs1=len(args[idx1]),
+                                                  ratio=len(args[idx2]) / len(args[idx1]), alpha=alfa)
+                    print("Moc zbioru (prawdopodobieństwo niepopełnienia błędu) ", result, '\n')
 
 
 if __name__ == "__main__":
@@ -369,8 +337,8 @@ if __name__ == "__main__":
 
     active_factor = pd.DataFrame(pd.read_csv("reproduction.csv", index_col='Country/Region'))
     frames = weather_data()
-    #hypothesis(active_factor, frames, coords)
-    hypothesis_part_2(confirmed, deaths_r, death_rate)
+    hypothesis(active_factor, frames, coords)
+    #hypothesis_part_2(confirmed, deaths_r, death_rate)
     stop = perf_counter()
     print('Elapsed time: ', str(stop - start))
 
