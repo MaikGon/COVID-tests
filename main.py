@@ -1,15 +1,18 @@
 import pandas as pd
 import numpy as np
-import netCDF4
 from netCDF4 import Dataset
 from scipy.stats import f_oneway
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from dateutil.relativedelta import relativedelta
-from time import perf_counter
 import math
 from scipy.stats import chi2_contingency, normaltest
 from statsmodels.stats.power import TTestIndPower
 import pycountry_convert as pc
+
+
+###############
+# W zadaniu 1 zastosowano grupowanie po krajach i policzono średnią z lat i long
+###############
 
 
 def load_data(data):
@@ -26,6 +29,7 @@ def load_data(data):
 
 
 def zad1():
+    print('Zadanie 1')
     confirmed, coords = load_data('time_series_covid19_confirmed_global.csv')
     deaths, _ = load_data('time_series_covid19_deaths_global.csv')
     recovered, _ = load_data('time_series_covid19_recovered_global.csv')
@@ -73,17 +77,18 @@ def zad1():
     deaths_r = deaths_r.groupby([deaths_r.columns.year, deaths_r.columns.month], axis=1).sum()
 
     death_rate = deaths_r.divide(rec_death)
-    #print('Death_rate: ', death_rate)
+    print('Skumulowana śmiertelność: ', '\n',  death_rate)
 
     # Active cases
     active = confirmed.subtract(deaths).subtract(recovered)
     active.columns = pd.to_datetime(active.columns)
-    #print('Active cases: ', active)
+    print('Aktywne przypadki: ', '\n', active)
 
     return active, coords, confirmed, deaths, death_rate
 
 
 def zad2(active):
+    print('Zadanie 2')
     active_seven = active.copy()
     active_factor = active.copy()
 
@@ -107,7 +112,7 @@ def zad2(active):
 
     for i in range(11): # 6+5
         active_factor.drop([active_factor.columns[0]], axis=1, inplace=True)
-    # print(active_factor)
+    print('Współczynnik reprodukcji: ', '\n', active_factor)
     active_factor.to_csv("reproduction.csv")
 
     return active_factor
@@ -134,6 +139,7 @@ def weather_data():
 
 
 def hypothesis(data, frames, coords):
+    print('Testowanie hipotez cz.1')
     analysis = TTestIndPower()
     # Dict for further tasks
     data_dict = {
@@ -230,11 +236,12 @@ def hypothesis(data, frames, coords):
             print('Wariancje:')
             for arg in args:
                 print(np.std(arg))
-
+            print('Wariancje są zbliżone')
             f_value, p_value = f_oneway(*args)
             print(f'F-stat: {f_value}, p-val: {p_value}', '\n')
 
             if p_value < alfa:
+                print('Test one-way Anova wykazał, że należy przeprowadzić analizę post-hoc', '\n')
                 tukey = pairwise_tukeyhsd(np.concatenate([*args]), np.concatenate(
                     [[names[ind]] * len(f) for ind, f in enumerate(args)]))
                 print(tukey, '\n')
@@ -249,13 +256,16 @@ def hypothesis(data, frames, coords):
 
                         effect = (np.mean(all_array[int(d1)]) - np.mean(all_array[int(d2)])) / ((np.std(all_array[int(d1)]) + np.std(all_array[int(d2)])) / 2)
                         result = analysis.solve_power(effect, power=None, nobs1=len(all_array[int(d1)]), ratio=len(all_array[int(d2)])/len(all_array[int(d1)]), alpha=alfa)
-                        print("Moc zbioru (prawdopodobieństwo niepopełnienia błędu) ", result)
+                        print("Moc zbioru: ", result)
                         print('Pomiędzy przedziałami temperatur', data_dict[d1], ' oraz ', data_dict[d2],
-                              'zauważono istotne różnice. Możemy stwierdzić z prawdopodobieństwem '
-                              , str(result), ', że temperatura wpływa na szybkość rozprzestrzeniania się wirusa.', '\n')
+                              'zauważono istotne różnice.', '\n')
+
+    print('Na podstawie przeprowadzonych analiz, możemy stwierdzić, '
+          'że temperatura wpływa na szybkość rozprzestrzeniania się wirusa.', '\n')
 
 
 def hypothesis_part_2(confirmed, deaths, death_rate):
+    print('Testowanie hipotez cz.2', '\n')
     analysis = TTestIndPower()
     not_europe = []
     for ctr in confirmed.index:
@@ -286,7 +296,7 @@ def hypothesis_part_2(confirmed, deaths, death_rate):
 
     chi2, p, dof, ex = chi2_contingency(obs)
     # print('chi2: ', chi2, '\n', 'p: ', p, '\n', 'dof: ', dof, '\n', 'ex: ', ex)
-    print('\n', 'p = ', p)
+    print('Wartość p z testu chi2 = ', p)
     if p < alfa:
         print('Wartość p = ', p, ',a więc możemy stwierdzić, że są istotne róznice w śmiertelności pomiędzy krajami w Europie')
     else:
@@ -307,17 +317,33 @@ def hypothesis_part_2(confirmed, deaths, death_rate):
 
     print('p = ', p)
     if p < alfa:
+        arr_std = []
         print('Możemy odrzucić hipotezę o nie normalności rozkładów')
         print('Wariancje:')
         for arg in args:
             print(np.std(arg))
+            arr_std.append(np.std(arg))
+
+        index_val = []
+        war_median = np.median(arr_std)
+
+        print('Wariancje odstające (jeżeli wariancja różni się o 1 od mediany, kraj zostaje usunięty z listy):')
+        for ind, med in enumerate(arr_std):
+            if abs(med - war_median) > 1:
+                print(names[ind], arr_std[ind])
+                index_val.append(ind)
+
+        for i in reversed(index_val):
+            args.pop(i)
+            names.pop(i)
 
         f_value, p_value = f_oneway(*args)
-        print(f'F-stat: {f_value}, p-val: {p_value}')
+        print(f'F-stat: {f_value}, p-val: {p_value}', '\n')
         if p_value < alfa:
+            print('Test one-way Anova wykazał, że należy przeprowadzić analizę post-hoc', '\n')
             tukey = pairwise_tukeyhsd(np.concatenate([*args]), np.concatenate(
                 [[names[ind]] * len(f) for ind, f in enumerate(args)]))
-            print('\n', tukey, '\n')
+            print(tukey, '\n')
             dt_frame = pd.DataFrame(data=tukey._results_table.data[1:], columns=tukey._results_table.data[0])
 
             for idx in dt_frame.index:
@@ -334,21 +360,20 @@ def hypothesis_part_2(confirmed, deaths, death_rate):
                                 (np.std(args[idx1]) + np.std(args[idx2])) / 2)
                     result = analysis.solve_power(effect, power=None, nobs1=len(args[idx1]),
                                                   ratio=len(args[idx2]) / len(args[idx1]), alpha=alfa)
-                    print("Moc zbioru (prawdopodobieństwo niepopełnienia błędu) ", result, '\n')
+                    print("Moc zbioru: ", result, '\n')
                     print('Pomiędzy krajami', str(dt_frame['group1'][idx]), ' oraz ', str(dt_frame['group2'][idx]),
-                          'zauważono istotne różnice. Możemy stwierdzić z prawdopodobieństwem '
-                          , str(result), ', że między poszczególnymi krajami w Europie istnieją istotne różnice w śmiertelności.', '\n')
+                          'zauważono istotne różnice.', '\n')
+
+    print('Pomimo tego, że test one-way Anova wykazał, że pomiędzy krajami mogą być istotne różnice, wynik testu '
+          'post-hoc Tukeya wskazuje, iż danych jest zbyt mało, aby móc stwierdzić pomiędzy którymi krajami są różnice.')
 
 
 if __name__ == "__main__":
-    start = perf_counter()
     active, coords, confirmed, deaths_r, death_rate = zad1()
-    # active_factor = zad2(active)
+    active_factor = zad2(active)
 
-    active_factor = pd.DataFrame(pd.read_csv("reproduction.csv", index_col='Country/Region'))
     frames = weather_data()
     hypothesis(active_factor, frames, coords)
     hypothesis_part_2(confirmed, deaths_r, death_rate)
-    stop = perf_counter()
-    print('Elapsed time: ', str(stop - start))
+
 
